@@ -1,0 +1,39 @@
+# OS / IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Environment & Secrets
+.env
+.env.*
+!.env.example
+
+# Laravel / PHP
+laravel/vendor/
+laravel/node_modules/
+laravel/public/build/
+laravel/public/hot
+laravel/storage/*.key
+laravel/storage/framework/cache/data/*
+laravel/storage/framework/sessions/*
+laravel/storage/framework/views/*
+laravel/storage/logs/*
+laravel/.phpunit.result.cache
+
+# Go
+go/bin/
+go/vendor/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Benchmarking & Runtime logs
+benchmarks/results/
+*.log
