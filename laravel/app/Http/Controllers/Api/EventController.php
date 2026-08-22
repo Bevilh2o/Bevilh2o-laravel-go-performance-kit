@@ -15,7 +15,7 @@ class EventController extends Controller
     ) {}
 
     /**
-     * Ingest an event (Synchronous Baseline Implementation).
+     * Synchronous baseline endpoint (HTTP -> DB).
      */
     public function store(StoreEventRequest $request): JsonResponse
     {
@@ -30,5 +30,18 @@ class EventController extends Controller
                 'occurred_at' => $event->occurred_at->toIso8601String(),
             ],
         ], Response::HTTP_CREATED);
+    }
+
+    /**
+     * Asynchronous baseline endpoint (HTTP -> Redis Queue -> 202 Accepted).
+     */
+    public function storeAsync(StoreEventRequest $request): JsonResponse
+    {
+        $this->ingestionService->ingestAsync($request->validated());
+
+        return response()->json([
+            'status' => 'queued',
+            'message' => 'Event accepted for background processing',
+        ], Response::HTTP_ACCEPTED);
     }
 }

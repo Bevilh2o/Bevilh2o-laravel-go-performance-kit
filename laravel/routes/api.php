@@ -1,11 +1,10 @@
 <?php
 
 use App\Http\Controllers\Api\EventController;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
-Route::get('/user', function (Request $request) {
-    return $request->user();
-})->middleware('auth:sanctum');
-
+// Synchronous baseline (direct DB insertion)
 Route::post('/events', [EventController::class, 'store']);
+
+// Asynchronous baseline (queued to Redis)
+Route::post('/events/async', [EventController::class, 'storeAsync']);
