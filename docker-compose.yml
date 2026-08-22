@@ -1,5 +1,27 @@
 services:
   # ============================================================================
+  # Laravel Application (HTTP API & Domain Engine)
+  # ============================================================================
+  app:
+    build:
+      context: .
+      dockerfile: docker/laravel/Dockerfile
+    container_name: lgpk-laravel
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-8000}:8000"
+    working_dir: /var/www/html
+    volumes:
+      - ./laravel:/var/www/html
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - lgpk-network
+
+  # ============================================================================
   # PostgreSQL (Primary Relational Database)
   # ============================================================================
   postgres:
