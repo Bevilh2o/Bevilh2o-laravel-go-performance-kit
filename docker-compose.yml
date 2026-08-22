@@ -1,0 +1,55 @@
+services:
+  # ============================================================================
+  # PostgreSQL (Primary Relational Database)
+  # ============================================================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: lgpk-postgres
+    restart: unless-stopped
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    environment:
+      POSTGRES_DB: ${DB_DATABASE:-lgpk_db}
+      POSTGRES_USER: ${DB_USERNAME:-lgpk_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-lgpk_secret}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-lgpk_user} -d ${DB_DATABASE:-lgpk_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - lgpk-network
+
+  # ============================================================================
+  # Redis (Queues, Cache, and Workload Coordination)
+  # ============================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: lgpk-redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - lgpk-network
+
+# ==============================================================================
+# Persistent Volumes & Network
+# ==============================================================================
+volumes:
+  pgdata:
+    driver: local
+  redisdata:
+    driver: local
+
+networks:
+  lgpk-network:
+    driver: bridge
