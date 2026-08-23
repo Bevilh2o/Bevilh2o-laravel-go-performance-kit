@@ -4,8 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
+	"net/http/pprof"
 	"os"
 	"os/signal"
 	"syscall"
@@ -13,55 +14,78 @@ import (
 
 	"github.com/laravel-go-performance-kit/ingestion/internal/config"
 	"github.com/laravel-go-performance-kit/ingestion/internal/handler"
+	"github.com/laravel-go-performance-kit/ingestion/internal/middleware"
 	"github.com/laravel-go-performance-kit/ingestion/internal/repository"
 )
 
 func main() {
+	// Initialize JSON Structured Logger
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	}))
+	slog.SetDefault(logger)
+
 	cfg := config.LoadFromEnv()
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	log.Println("[INFO] Initializing PostgreSQL connection pool...")
+	logger.Info("initializing_database_pool", slog.String("host", "postgres"))
 	repo, err := repository.NewEventRepository(ctx, cfg.DBDSN)
 	if err != nil {
-		log.Fatalf("[FATAL] Could not connect to database: %v", err)
+		logger.Error("database_connection_failed", slog.String("error", err.Error()))
+		os.Exit(1)
 	}
 	defer repo.Close()
-	log.Println("[INFO] Database connection pool established successfully.")
+	logger.Info("database_pool_ready")
 
 	eventHandler := handler.NewEventHandler(repo)
 
+	// Application Multiplexer
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", handler.HealthHandler)
 	mux.HandleFunc("/events", eventHandler.Ingest)
 
+	// Observability: Register standard pprof profiling endpoints
+	mux.HandleFunc("/debug/pprof/", pprof.Index)
+	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
+	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
+
+	// Compose Middleware Chain: RequestID -> Logger -> Recovery -> Router
+	var rootHandler http.Handler = mux
+	rootHandler = middleware.Recovery(logger)(rootHandler)
+	rootHandler = middleware.StructuredLogger(logger)(rootHandler)
+	rootHandler = middleware.RequestID(rootHandler)
+
 	server := &http.Server{
 		Addr:         fmt.Sprintf(":%s", cfg.HTTPPort),
-		Handler:      mux,
+		Handler:      rootHandler,
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 10 * time.Second,
 		IdleTimeout:  60 * time.Second,
 	}
 
-	// Start HTTP server in a separate goroutine
+	// Start server in background goroutine
 	go func() {
-		log.Printf("[INFO] Go Ingestion Service listening on port %s...", cfg.HTTPPort)
+		logger.Info("server_started", slog.String("port", cfg.HTTPPort))
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Fatalf("[FATAL] HTTP server error: %v", err)
+			logger.Error("server_fatal_error", slog.String("error", err.Error()))
+			os.Exit(1)
 		}
 	}()
 
-	// Block until an interrupt signal is received
+	// Await OS Interrupt Signals
 	<-ctx.Done()
-	log.Println("[INFO] Shutdown signal received. Commencing graceful termination...")
+	logger.Info("shutdown_signal_received")
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	if err := server.Shutdown(shutdownCtx); err != nil {
-		log.Printf("[ERROR] Graceful shutdown encountered an error: %v", err)
+		logger.Error("graceful_shutdown_failed", slog.String("error", err.Error()))
 	}
 
-	log.Println("[INFO] Go Ingestion Service terminated cleanly.")
+	logger.Info("server_terminated_cleanly")
 }
