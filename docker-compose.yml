@@ -43,6 +43,30 @@ services:
       - lgpk-network
 
   # ============================================================================
+  # Go High-Throughput Ingestion Service
+  # ============================================================================
+  go-service:
+    build:
+      context: .
+      dockerfile: docker/go/Dockerfile
+    container_name: lgpk-go-service
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      HTTP_PORT: 8080
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USERNAME: lgpk_user
+      DB_PASSWORD: lgpk_secret
+      DB_DATABASE: lgpk_db
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - lgpk-network
+
+  # ============================================================================
   # PostgreSQL (Primary Relational Database)
   # ============================================================================
   postgres:
@@ -84,6 +108,17 @@ services:
     networks:
       - lgpk-network
 
+  # ============================================================================
+  # Load Testing & Benchmarking Suite (k6)
+  # ============================================================================
+  k6:
+    image: grafana/k6:latest
+    container_name: lgpk-k6
+    volumes:
+      - ./benchmarks:/benchmarks
+    networks:
+      - lgpk-network
+
 # ==============================================================================
 # Persistent Volumes & Network
 # ==============================================================================
@@ -96,4 +131,3 @@ volumes:
 networks:
   lgpk-network:
     driver: bridge
-
